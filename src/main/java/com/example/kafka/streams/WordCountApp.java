@@ -5,6 +5,7 @@ import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
+import org.apache.kafka.streams.Topology;
 import org.apache.kafka.streams.kstream.*;
 
 import java.util.Arrays;
@@ -20,6 +21,31 @@ public class WordCountApp {
         config.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass());
         config.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.String().getClass());
 
+        Topology topology = new WordCountApp().createTopology();
+
+        KafkaStreams streams = new KafkaStreams(topology, config);
+        streams.start();
+
+        //Prints the topology
+        System.out.println("********************************");
+        System.out.println(streams.toString());
+
+        //Shutdown hook to correctly / gracefully close the streams application
+        Runtime.getRuntime().addShutdownHook(new Thread(streams::close));
+
+        // Update:
+        // print the topology every 10 seconds for learning purposes
+        while(true){
+            streams.localThreadsMetadata().forEach(data -> System.out.println(data));
+            try {
+                Thread.sleep(5000);
+            } catch (InterruptedException e) {
+                break;
+            }
+        }
+    }
+
+    Topology createTopology() {
         StreamsBuilder builder = new StreamsBuilder();
         // 1 - stream from Kafka
         KStream<String, String> wordCountInput = builder.stream("word-count-input");
@@ -38,15 +64,6 @@ public class WordCountApp {
 
         // 7 - to in order to write the results back to kafka
         wordCount.toStream().to("word-count-output", Produced.with(Serdes.String(), Serdes.Long()));
-
-        KafkaStreams streams = new KafkaStreams(builder.build(), config);
-        streams.start();
-
-        //Prints the topology
-        System.out.println("********************************");
-        System.out.println(streams.toString());
-
-        //Shutdown hook to correctly / gracefully close the streams application
-        Runtime.getRuntime().addShutdownHook(new Thread(streams::close));
+        return builder.build();
     }
 }
